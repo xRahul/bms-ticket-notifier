@@ -275,6 +275,9 @@ def filter_shows(shows, theatre_filter, time_periods, date_codes):
     dates_set = set(d.strip() for d in date_codes.split(",")
                     if d.strip()) if date_codes else set()
 
+    # Pre-calculate valid time ranges to avoid redundant lookups in loop
+    valid_ranges = [TIME_PERIODS[p] for p in periods if p in TIME_PERIODS]
+
     for s in shows:
         # Theatre filter
         if kws:
@@ -293,12 +296,10 @@ def filter_shows(shows, theatre_filter, time_periods, date_codes):
             except ValueError:
                 tc = 0
             matched = False
-            for p in periods:
-                if p in TIME_PERIODS:
-                    lo, hi = TIME_PERIODS[p]
-                    if lo <= tc < hi:
-                        matched = True
-                        break
+            for lo, hi in valid_ranges:
+                if lo <= tc < hi:
+                    matched = True
+                    break
             if not matched:
                 continue
 
