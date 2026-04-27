@@ -10,6 +10,7 @@ jobs:
   check-tickets:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: actions-run
     permissions:
       contents: write
 
