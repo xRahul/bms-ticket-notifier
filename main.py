@@ -389,18 +389,14 @@ def _cat_status_label(status):
     return AVAIL_STATUS_MAP.get(status, ("UNKNOWN", ""))[0]
 
 
-def send_email(subject, changes, shows, movie_info):
-    api_key = RESEND_API_KEY.strip()
-    to = RESEND_TO_EMAIL.strip()
-    frm = RESEND_FROM_EMAIL.strip() or "onboarding@resend.dev"
+def _group_shows_by_venue(shows):
+    venue_groups = {}
+    for s in shows:
+        venue_groups.setdefault(s.venue_name, []).append(s)
+    return venue_groups
 
-    if not api_key or not to:
-        print("  ⚠️  Skipping email — RESEND_API_KEY or RESEND_TO_EMAIL not set.")
-        return
 
-    now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
-    movie_name = movie_info.get("name", "Movie")
-
+def _generate_email_html(movie_name, now_str, changes, venue_groups):
     # Build changes HTML
     changes_html = ""
     if changes:
@@ -415,11 +411,6 @@ def send_email(subject, changes, shows, movie_info):
         <ul style="margin:0 0 20px 0;padding-left:20px;line-height:1.6;color:#333;">
             {rows}
         </ul>"""
-
-    # Build shows section grouped by venue
-    venue_groups = {}
-    for s in shows:
-        venue_groups.setdefault(s.venue_name, []).append(s)
 
     shows_html = ""
     for vname, vshows in venue_groups.items():
@@ -455,7 +446,7 @@ def send_email(subject, changes, shows, movie_info):
             {show_rows}
         </table>"""
 
-    html = f"""<!doctype html>
+    return f"""<!doctype html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:24px;font-family:Arial,Helvetica,sans-serif;
@@ -478,7 +469,8 @@ def send_email(subject, changes, shows, movie_info):
 </body>
 </html>"""
 
-    # Build plain-text version with full show details
+
+def _generate_email_plain(subject, now_str, changes, venue_groups):
     plain_lines = [subject, "", f"Checked at: {now_str}", ""]
     if changes:
         plain_lines.append("Changes Detected:")
@@ -495,7 +487,24 @@ def send_email(subject, changes, shows, movie_info):
             fmt = f" [{s.screen_attr}]" if s.screen_attr else ""
             plain_lines.append(f"  {s.time}{fmt} - {cats}")
     plain_lines.extend(["", "This is an automated alert from BMS Ticket Notifier."])
-    plain = "\n".join(plain_lines)
+    return "\n".join(plain_lines)
+
+
+def send_email(subject, changes, shows, movie_info):
+    api_key = RESEND_API_KEY.strip()
+    to = RESEND_TO_EMAIL.strip()
+    frm = RESEND_FROM_EMAIL.strip() or "onboarding@resend.dev"
+
+    if not api_key or not to:
+        print("  ⚠️  Skipping email — RESEND_API_KEY or RESEND_TO_EMAIL not set.")
+        return
+
+    now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
+    movie_name = movie_info.get("name", "Movie")
+
+    venue_groups = _group_shows_by_venue(shows)
+    html = _generate_email_html(movie_name, now_str, changes, venue_groups)
+    plain = _generate_email_plain(subject, now_str, changes, venue_groups)
 
     try:
         resp = requests.post(
