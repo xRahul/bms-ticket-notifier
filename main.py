@@ -184,6 +184,12 @@ def fetch_bms(event_code, date_code, region_code, region_slug,
 # ──────────────────────────────────────────────────────────────────────
 def parse_movie_info(data):
     info = {"name": "Unknown Movie", "language": ""}
+
+    # Try getting the title from metadata.analytics
+    title = data.get("metadata", {}).get("analytics", {}).get("title")
+    if title:
+        info["name"] = title
+
     for w in data.get("data", {}).get("topStickyWidgets", []):
         if w.get("type") == "horizontal-text-list":
             for item in w.get("data", []):
@@ -196,7 +202,8 @@ def parse_movie_info(data):
         if w.get("type") == "vertical-text-list":
             for d in w.get("data", []):
                 if d.get("styleId") == "bottomsheet-subtitle":
-                    info["name"] = d.get("text", info["name"])
+                    if info["name"] == "Unknown Movie":
+                        info["name"] = d.get("text", info["name"])
     return info
 
 
