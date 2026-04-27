@@ -397,6 +397,23 @@ def _cat_status_label(status):
     return AVAIL_STATUS_MAP.get(status, ("UNKNOWN", ""))[0]
 
 
+def _cat_status_emoji(status):
+    return AVAIL_STATUS_MAP.get(status, ("UNKNOWN", ""))[1]
+
+
+def _cat_status_color(status):
+    # Colors for badges based on status
+    if status == "0":
+        return "#fbebeb", "#d32f2f" # Red for Sold Out
+    elif status == "1":
+        return "#fff4e5", "#ed6c02" # Yellow/Orange for Almost Full
+    elif status == "2":
+        return "#fff4e5", "#ed6c02" # Yellow/Orange for Filling Fast
+    elif status == "3":
+        return "#edf7ed", "#2e7d32" # Green for Available
+    return "#f5f5f5", "#333333"
+
+
 def _group_shows_by_venue(shows):
     venue_groups = {}
     for s in shows:
@@ -404,7 +421,7 @@ def _group_shows_by_venue(shows):
     return venue_groups
 
 
-def _generate_email_html(movie_name, now_str, changes, venue_groups):
+def _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info=None):
     # Build changes HTML
     changes_html = ""
     if changes:
@@ -424,76 +441,102 @@ def _generate_email_html(movie_name, now_str, changes, venue_groups):
     for vname, vshows in venue_groups.items():
         show_rows = ""
         for s in vshows:
-            cats = " | ".join(
-                f"{escape(c.name)} Rs.{escape(c.price)} ({_cat_status_label(c.status)})"
-                for c in s.categories
-            )
-            fmt = f" [{escape(s.screen_attr)}]" if s.screen_attr else ""
+            cat_badges = []
+            for c in s.categories:
+                bg, fg = _cat_status_color(c.status)
+                emoji = _cat_status_emoji(c.status)
+                label = _cat_status_label(c.status)
+                badge = (f'<span style="display:inline-block;padding:2px 6px;'
+                         f'margin:2px 4px 2px 0;border-radius:4px;font-size:12px;'
+                         f'background-color:{bg};color:{fg};border:1px solid {fg}40;">'
+                         f'<strong>{escape(c.name)}</strong> ₹{escape(c.price)} '
+                         f'— {emoji} {label}</span>')
+                cat_badges.append(badge)
+
+            cats = " ".join(cat_badges)
+            fmt = f" <span style='color:#666;font-size:12px;'>[{escape(s.screen_attr)}]</span>" if s.screen_attr else ""
             show_rows += (
                 f'<tr>'
-                f'<td style="padding:5px 8px;border-bottom:1px solid #ddd;'
-                f'font-size:13px;vertical-align:top;">'
+                f'<td style="padding:8px 8px;border-bottom:1px solid #eee;'
+                f'font-size:14px;vertical-align:top;font-weight:bold;white-space:nowrap;">'
                 f'{escape(s.time)}{fmt}</td>'
-                f'<td style="padding:5px 8px;border-bottom:1px solid #ddd;'
-                f'font-size:13px;vertical-align:top;">'
+                f'<td style="padding:8px 8px;border-bottom:1px solid #eee;'
+                f'vertical-align:top;">'
                 f'{cats}</td>'
                 f'</tr>'
             )
 
         shows_html += f"""
-        <p style="margin:14px 0 4px 0;font-size:14px;font-weight:bold;color:#333;">
-            {escape(vname)}
-        </p>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-            <tr style="background:#f5f5f5;">
-                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid #ddd;
-                           font-weight:bold;">Time</th>
-                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid #ddd;
-                           font-weight:bold;">Categories</th>
-            </tr>
-            {show_rows}
-        </table>"""
+        <div style="margin-top:20px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
+            <div style="background:#f8f9fa;padding:10px 14px;border-bottom:1px solid #e0e0e0;">
+                <p style="margin:0;font-size:15px;font-weight:bold;color:#333;">
+                    🏢 {escape(vname)}
+                </p>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                {show_rows}
+            </table>
+        </div>"""
+
+    lang_str = f" • {escape(movie_info['language'])}" if movie_info and movie_info.get("language") else ""
+    url = CONFIG.get("url", "#")
 
     return f"""<!doctype html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:24px;font-family:Arial,Helvetica,sans-serif;
-             font-size:14px;color:#333;background:#fff;">
-    <h2 style="margin:0 0 4px 0;font-size:18px;color:#111;">
-        BMS Alert: {escape(movie_name)}
-    </h2>
-    <p style="margin:0 0 20px 0;font-size:13px;color:#666;">
-        {escape(now_str)}
-    </p>
-    <hr style="border:none;border-top:1px solid #ddd;margin:0 0 20px 0;">
-    {changes_html}
-    <h3 style="margin:0 0 8px 0;font-size:15px;font-weight:bold;color:#333;">
-        Current Showtimes
-    </h3>
-    {shows_html}
-    <p style="margin:24px 0 0 0;font-size:12px;color:#999;">
-        This is an automated alert from BMS Ticket Notifier.
-    </p>
+             font-size:14px;color:#333;background:#f9f9f9;">
+    <div style="max-width:600px;margin:0 auto;background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+        <h2 style="margin:0 0 4px 0;font-size:22px;color:#111;">
+            🎬 {escape(movie_name)}{lang_str}
+        </h2>
+        <p style="margin:0 0 16px 0;font-size:13px;color:#666;">
+            Checked at: {escape(now_str)}
+        </p>
+
+        <div style="margin-bottom:24px;">
+            <a href="{escape(url)}" style="display:inline-block;background:#f84464;color:#fff;
+                      text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:bold;
+                      font-size:15px;">🎟️ Book Tickets</a>
+        </div>
+
+        <hr style="border:none;border-top:1px solid #eee;margin:0 0 20px 0;">
+        {changes_html}
+        <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:bold;color:#333;">
+            Current Showtimes
+        </h3>
+        {shows_html}
+        <p style="margin:30px 0 0 0;font-size:12px;color:#999;text-align:center;">
+            This is an automated alert from BMS Ticket Notifier.
+        </p>
+    </div>
 </body>
 </html>"""
 
 
-def _generate_email_plain(subject, now_str, changes, venue_groups):
+def _generate_email_plain(subject, now_str, changes, venue_groups, movie_info=None):
     plain_lines = [subject, "", f"Checked at: {now_str}", ""]
+
+    url = CONFIG.get("url", "")
+    if url:
+        plain_lines.extend([f"Book Tickets: {url}", ""])
+
     if changes:
         plain_lines.append("Changes Detected:")
         plain_lines.extend(f"  - {c}" for c in changes)
         plain_lines.append("")
+
     plain_lines.append("Current Showtimes:")
     for vname, vshows in venue_groups.items():
-        plain_lines.append(f"\n{vname}")
+        plain_lines.append(f"\n🏢 {vname}")
         for s in vshows:
             cats = " | ".join(
-                f"{c.name} Rs.{c.price} ({_cat_status_label(c.status)})"
+                f"{c.name} ₹{c.price} {_cat_status_emoji(c.status)} {_cat_status_label(c.status)}"
                 for c in s.categories
             )
             fmt = f" [{s.screen_attr}]" if s.screen_attr else ""
-            plain_lines.append(f"  {s.time}{fmt} - {cats}")
+            plain_lines.append(f"  🕒 {s.time}{fmt}  ▶  {cats}")
+
     plain_lines.extend(["", "This is an automated alert from BMS Ticket Notifier."])
     return "\n".join(plain_lines)
 
@@ -511,8 +554,8 @@ def send_email(subject, changes, shows, movie_info):
     movie_name = movie_info.get("name", "Movie")
 
     venue_groups = _group_shows_by_venue(shows)
-    html = _generate_email_html(movie_name, now_str, changes, venue_groups)
-    plain = _generate_email_plain(subject, now_str, changes, venue_groups)
+    html = _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info)
+    plain = _generate_email_plain(subject, now_str, changes, venue_groups, movie_info)
 
     try:
         resp = requests.post(
@@ -627,13 +670,16 @@ def main():
 
     # Print current status
     print(f"\n  Current status ({len(filtered)} shows):")
-    for s in filtered:
-        cats = ", ".join(
-            f"{c.name}=₹{c.price}({AVAIL_STATUS_MAP.get(c.status, ('?',''))[0]})"
-            for c in s.categories
-        )
-        fmt = f"|{s.screen_attr}" if s.screen_attr else ""
-        print(f"    {s.venue_name} — {s.time}{fmt} [{s.date_code}] — {cats}")
+    current_venue_groups = _group_shows_by_venue(filtered)
+    for vname, vshows in current_venue_groups.items():
+        print(f"\n  🏢 {vname}")
+        for s in vshows:
+            cats = " | ".join(
+                f"{c.name} ₹{c.price} {AVAIL_STATUS_MAP.get(c.status, ('?', ''))[1]} {AVAIL_STATUS_MAP.get(c.status, ('?', ''))[0]}"
+                for c in s.categories
+            )
+            fmt = f" [{s.screen_attr}]" if s.screen_attr else ""
+            print(f"    🕒 {s.time}{fmt} [{s.date_code}]  ▶  {cats}")
 
     print("\n  Done.")
 
