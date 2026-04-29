@@ -1,5 +1,36 @@
 import pytest
-from main import resolve_region, REGION_MAP
+from main import resolve_region, parse_bms_url, REGION_MAP
+
+def test_parse_bms_url_full():
+    url = "https://in.bookmyshow.com/movies/chennai/dhurandhar-the-revenge/buytickets/ET00478890/20231015"
+    result = parse_bms_url(url)
+    assert result == {"event_code": "ET00478890", "date_code": "20231015", "region_slug": "chennai"}
+
+def test_parse_bms_url_without_date():
+    url = "https://in.bookmyshow.com/movies/mumbai/some-movie/buytickets/ET12345678"
+    result = parse_bms_url(url)
+    assert result == {"event_code": "ET12345678", "date_code": None, "region_slug": "mumbai"}
+
+def test_parse_bms_url_missing_movies():
+    url = "https://in.bookmyshow.com/plays/delhi/some-play/ET87654321"
+    result = parse_bms_url(url)
+    assert result == {"event_code": "ET87654321", "date_code": None, "region_slug": None}
+
+def test_parse_bms_url_movies_at_end():
+    url = "https://in.bookmyshow.com/some/path/movies"
+    result = parse_bms_url(url)
+    assert result == {"event_code": None, "date_code": None, "region_slug": None}
+
+def test_parse_bms_url_empty():
+    url = ""
+    result = parse_bms_url(url)
+    assert result == {"event_code": None, "date_code": None, "region_slug": None}
+
+def test_parse_bms_url_malformed():
+    url = "not-a-valid-url"
+    result = parse_bms_url(url)
+    assert result == {"event_code": None, "date_code": None, "region_slug": None}
+
 
 def test_resolve_region_known_slug():
     assert resolve_region("chennai") == REGION_MAP["chennai"]
