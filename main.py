@@ -223,6 +223,8 @@ def parse_dates(data):
     return dates
 
 
+_date_regex = re.compile(r"^\d{8}")
+
 def parse_shows(data):
     shows = []
     for w in data.get("data", {}).get("showtimeWidgets", []):
@@ -244,8 +246,8 @@ def parse_shows(data):
                         sa.get("showDateCode", "")
                         or sa.get("dateCode", "")
                     ).strip()
-                    if not date_code and re.match(
-                            r"^\d{8}", sa.get("cutOffDateTime", "")):
+                    if not date_code and _date_regex.match(
+                            sa.get("cutOffDateTime", "")):
                         date_code = sa["cutOffDateTime"][:8]
 
                     show = ShowInfo(
