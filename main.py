@@ -223,6 +223,8 @@ def parse_dates(data):
     return dates
 
 
+_date_regex = re.compile(r"^\d{8}")
+
 def parse_shows(data):
     shows = []
     for w in data.get("data", {}).get("showtimeWidgets", []):
@@ -244,8 +246,8 @@ def parse_shows(data):
                         sa.get("showDateCode", "")
                         or sa.get("dateCode", "")
                     ).strip()
-                    if not date_code and re.match(
-                            r"^\d{8}", sa.get("cutOffDateTime", "")):
+                    if not date_code and _date_regex.match(
+                            sa.get("cutOffDateTime", "")):
                         date_code = sa["cutOffDateTime"][:8]
 
                     show = ShowInfo(
@@ -421,6 +423,27 @@ def _group_shows_by_venue(shows):
     return venue_groups
 
 
+def _format_categories(categories, is_html=False):
+    if is_html:
+        cat_badges = []
+        for c in categories:
+            bg, fg = _cat_status_color(c.status)
+            emoji = _cat_status_emoji(c.status)
+            label = _cat_status_label(c.status)
+            badge = (f'<span style="display:inline-block;padding:2px 6px;'
+                     f'margin:2px 4px 2px 0;border-radius:4px;font-size:12px;'
+                     f'background-color:{bg};color:{fg};border:1px solid {fg}40;">'
+                     f'<strong>{escape(c.name)}</strong> ₹{escape(c.price)} '
+                     f'— {emoji} {label}</span>')
+            cat_badges.append(badge)
+        return " ".join(cat_badges)
+
+    return " | ".join(
+        f"{c.name} ₹{c.price} {_cat_status_emoji(c.status)} {_cat_status_label(c.status)}"
+        for c in categories
+    )
+
+
 def _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info=None):
     # Build changes HTML
     changes_html = ""
@@ -437,25 +460,13 @@ def _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info=
             {rows}
         </ul>"""
 
-    shows_html = ""
+    shows_html_parts = []
     for vname, vshows in venue_groups.items():
-        show_rows = ""
+        show_rows_parts = []
         for s in vshows:
-            cat_badges = []
-            for c in s.categories:
-                bg, fg = _cat_status_color(c.status)
-                emoji = _cat_status_emoji(c.status)
-                label = _cat_status_label(c.status)
-                badge = (f'<span style="display:inline-block;padding:2px 6px;'
-                         f'margin:2px 4px 2px 0;border-radius:4px;font-size:12px;'
-                         f'background-color:{bg};color:{fg};border:1px solid {fg}40;">'
-                         f'<strong>{escape(c.name)}</strong> ₹{escape(c.price)} '
-                         f'— {emoji} {label}</span>')
-                cat_badges.append(badge)
-
-            cats = " ".join(cat_badges)
+            cats = _format_categories(s.categories, is_html=True)
             fmt = f" <span style='color:#666;font-size:12px;'>[{escape(s.screen_attr)}]</span>" if s.screen_attr else ""
-            show_rows += (
+            show_rows_parts.append(
                 f'<tr>'
                 f'<td style="padding:8px 8px;border-bottom:1px solid #eee;'
                 f'font-size:14px;vertical-align:top;font-weight:bold;white-space:nowrap;">'
@@ -466,7 +477,8 @@ def _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info=
                 f'</tr>'
             )
 
-        shows_html += f"""
+        show_rows = "".join(show_rows_parts)
+        shows_html_parts.append(f"""
         <div style="margin-top:20px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
             <div style="background:#f8f9fa;padding:10px 14px;border-bottom:1px solid #e0e0e0;">
                 <p style="margin:0;font-size:15px;font-weight:bold;color:#333;">
@@ -476,7 +488,9 @@ def _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info=
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
                 {show_rows}
             </table>
-        </div>"""
+        </div>""")
+
+    shows_html = "".join(shows_html_parts)
 
     lang_str = f" • {escape(movie_info['language'])}" if movie_info and movie_info.get("language") else ""
     url = CONFIG.get("url", "#")
@@ -530,10 +544,7 @@ def _generate_email_plain(subject, now_str, changes, venue_groups, movie_info=No
     for vname, vshows in venue_groups.items():
         plain_lines.append(f"\n🏢 {vname}")
         for s in vshows:
-            cats = " | ".join(
-                f"{c.name} ₹{c.price} {_cat_status_emoji(c.status)} {_cat_status_label(c.status)}"
-                for c in s.categories
-            )
+            cats = _format_categories(s.categories)
             fmt = f" [{s.screen_attr}]" if s.screen_attr else ""
             plain_lines.append(f"  🕒 {s.time}{fmt}  ▶  {cats}")
 
@@ -674,10 +685,7 @@ def main():
     for vname, vshows in current_venue_groups.items():
         print(f"\n  🏢 {vname}")
         for s in vshows:
-            cats = " | ".join(
-                f"{c.name} ₹{c.price} {AVAIL_STATUS_MAP.get(c.status, ('?', ''))[1]} {AVAIL_STATUS_MAP.get(c.status, ('?', ''))[0]}"
-                for c in s.categories
-            )
+            cats = _format_categories(s.categories)
             fmt = f" [{s.screen_attr}]" if s.screen_attr else ""
             print(f"    🕒 {s.time}{fmt} [{s.date_code}]  ▶  {cats}")
 
