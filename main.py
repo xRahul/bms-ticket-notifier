@@ -439,9 +439,9 @@ def _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info=
             {rows}
         </ul>"""
 
-    shows_html = ""
+    shows_html_parts = []
     for vname, vshows in venue_groups.items():
-        show_rows = ""
+        show_rows_parts = []
         for s in vshows:
             cat_badges = []
             for c in s.categories:
@@ -457,7 +457,7 @@ def _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info=
 
             cats = " ".join(cat_badges)
             fmt = f" <span style='color:#666;font-size:12px;'>[{escape(s.screen_attr)}]</span>" if s.screen_attr else ""
-            show_rows += (
+            show_rows_parts.append(
                 f'<tr>'
                 f'<td style="padding:8px 8px;border-bottom:1px solid #eee;'
                 f'font-size:14px;vertical-align:top;font-weight:bold;white-space:nowrap;">'
@@ -468,7 +468,8 @@ def _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info=
                 f'</tr>'
             )
 
-        shows_html += f"""
+        show_rows = "".join(show_rows_parts)
+        shows_html_parts.append(f"""
         <div style="margin-top:20px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
             <div style="background:#f8f9fa;padding:10px 14px;border-bottom:1px solid #e0e0e0;">
                 <p style="margin:0;font-size:15px;font-weight:bold;color:#333;">
@@ -478,7 +479,9 @@ def _generate_email_html(movie_name, now_str, changes, venue_groups, movie_info=
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
                 {show_rows}
             </table>
-        </div>"""
+        </div>""")
+
+    shows_html = "".join(shows_html_parts)
 
     lang_str = f" • {escape(movie_info['language'])}" if movie_info and movie_info.get("language") else ""
     url = CONFIG.get("url", "#")
