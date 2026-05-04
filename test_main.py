@@ -1,6 +1,6 @@
 import pytest
 from main import (
-    resolve_region, REGION_MAP, parse_bms_url,
+    resolve_region, REGION_MAP, detect_changes, parse_bms_url,
     _cat_status_color, _cat_status_emoji, _cat_status_label,
     filter_shows, ShowInfo, CatInfo
 )
@@ -24,6 +24,76 @@ def test_resolve_region_empty_and_none():
 
 def test_resolve_region_long_unknown_slug():
     assert resolve_region("this-is-a-very-long-slug") == ("THIS-I", "this-is-a-very-long-slug", "0", "0", "")
+
+def test_detect_changes_no_change():
+    state = {
+        "dates": {"20240101": "BOOKABLE"},
+        "shows": {"show1": {"venue": "V1", "time": "10:00", "date": "20240101", "cat": "VIP", "price": "100", "status": "3"}}
+    }
+    assert detect_changes(state, state) == []
+
+def test_detect_changes_new_date_opened():
+    old_state = {"dates": {"20240101": "NOT_OPEN", "20240102": "NOT_OPEN"}}
+    new_state = {"dates": {"20240101": "BOOKABLE", "20240102": "AVAILABLE"}}
+
+    changes = detect_changes(old_state, new_state)
+    assert len(changes) == 2
+    assert "📅 NEW DATE OPENED: 20240101" in changes
+    assert "📅 NEW DATE OPENED: 20240102" in changes
+
+def test_detect_changes_new_showtime():
+    old_state = {"shows": {}}
+    new_state = {
+        "shows": {
+            "show1": {"venue": "V1", "time": "10:00 AM", "date": "20240101", "cat": "VIP", "price": "1000", "status": "3"}
+        }
+    }
+    changes = detect_changes(old_state, new_state)
+    assert changes == ["🆕 NEW: V1 10:00 AM [20240101] — VIP ₹1000"]
+
+def test_detect_changes_sold_out_to_available():
+    old_state = {
+        "shows": {
+            "show1": {"venue": "V1", "time": "10:00 AM", "date": "20240101", "cat": "VIP", "price": "1000", "status": "0"}
+        }
+    }
+    new_state = {
+        "shows": {
+            "show1": {"venue": "V1", "time": "10:00 AM", "date": "20240101", "cat": "VIP", "price": "1000", "status": "3"}
+        }
+    }
+    changes = detect_changes(old_state, new_state)
+    assert changes == ["🟢 BACK: V1 10:00 AM [20240101] — VIP → AVAILABLE"]
+
+    # Also test unknown status mapping
+    new_state_unknown = {
+        "shows": {
+            "show1": {"venue": "V1", "time": "10:00 AM", "date": "20240101", "cat": "VIP", "price": "1000", "status": "99"}
+        }
+    }
+    changes = detect_changes(old_state, new_state_unknown)
+    assert changes == ["⚪ BACK: V1 10:00 AM [20240101] — VIP → UNKNOWN"]
+
+def test_detect_changes_multiple_changes():
+    old_state = {
+        "dates": {"20240101": "NOT_OPEN"},
+        "shows": {
+            "show1": {"venue": "V1", "time": "10:00 AM", "date": "20240101", "cat": "VIP", "price": "1000", "status": "0"}
+        }
+    }
+    new_state = {
+        "dates": {"20240101": "BOOKABLE"},
+        "shows": {
+            "show1": {"venue": "V1", "time": "10:00 AM", "date": "20240101", "cat": "VIP", "price": "1000", "status": "3"},
+            "show2": {"venue": "V2", "time": "12:00 PM", "date": "20240101", "cat": "Gen", "price": "500", "status": "3"}
+        }
+    }
+    changes = detect_changes(old_state, new_state)
+
+    assert len(changes) == 3
+    assert "📅 NEW DATE OPENED: 20240101" in changes
+    assert "🆕 NEW: V2 12:00 PM [20240101] — Gen ₹500" in changes
+    assert "🟢 BACK: V1 10:00 AM [20240101] — VIP → AVAILABLE" in changes
 
 def test_parse_bms_url_valid():
     url = "https://in.bookmyshow.com/movies/chennai/dhurandhar-the-revenge/buytickets/ET00478890"
